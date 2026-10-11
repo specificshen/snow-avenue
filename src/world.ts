@@ -2,28 +2,18 @@ import * as THREE from "three";
 import { atDepth, ground, shot } from "./camera";
 import { farRows, fence, lamps, palettes, sky, trees } from "./layout";
 import { params, rng } from "./params";
-import { roadTextures, snowTexture } from "./textures";
-import { buildFarTree, buildTree, leafMesh, woodMesh, type BuiltTree } from "./tree";
+import { snowTexture } from "./textures";
+import { buildFarTree, buildTree, fogBranchFill, leafMesh, rightTwigWeb, woodMesh, type BuiltTree } from "./tree";
+import { roadMaskMesh, wetRoad } from "./road";
+import { FAR, roadEdges } from "./world-shared";
+export { roadEdges };
 
-const FAR = 260;
-export const roadEdges = { left: ground(0, 0.94).x, right: ground(1, 0.93).x };
-
-function road(env: THREE.Texture | null) {
-  const { left, right } = roadEdges, w = right - left;
-  const { map, rough } = roadTextures(params.seed);
-  for (const t of [map, rough]) t.repeat.set(1, FAR / (w * 8));
-  const geo = new THREE.PlaneGeometry(w, FAR, 1, 1).rotateX(-Math.PI / 2);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshPhysicalMaterial({
-    map, roughnessMap: rough, envMap: env, roughness: 0.6, metalness: 0, clearcoat: 0.35, clearcoatRoughness: 0.12, envMapIntensity: 0.5,
-  }));
-  mesh.position.set((left + right) / 2, 0, 4 - FAR / 2);
-  return mesh;
-}
+type Backend = "webgpu" | "webgl";
 
 function verge(side: -1 | 1) {
   const edge = side < 0 ? roadEdges.left : roadEdges.right, w = 40;
   const leaves = side < 0 ? [...palettes.red, "#c86a20", "#a04018"] : ["#b07a40", "#9a6030", "#c89050"];
-  const map = snowTexture(params.seed + side, leaves, side < 0 ? 0.8 : 0.6);
+  const map = snowTexture(params.seed + side, leaves, side < 0 ? 0.85 : 0.65);
   map.repeat.set(w / 3, FAR / 3);
   const geo = new THREE.PlaneGeometry(w, FAR, 40, 200).rotateX(-Math.PI / 2);
   const p = geo.attributes.position, r = rng(9 + side);
@@ -35,21 +25,22 @@ function verge(side: -1 | 1) {
   const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map, color: side < 0 ? "#c4c4c8" : "#b4aeaa", roughness: 0.85 }));
   mesh.scale.x = side;
   mesh.position.set(edge + (side * w) / 2, 0, 4 - FAR / 2);
-  if (side < 0) mesh.material.side = THREE.DoubleSide;
   return mesh;
 }
 
-/** Fallen leaves lying on the verges: drifts on the left, a scatter on the right. */
 function fallenLeaves() {
   const r = rng(31), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3();
   const drifts = [
-    { x: [roadEdges.left - 3.5, roadEdges.left - 0.2], z: [-3, -9], n: 9000, cols: [...palettes.red, "#c25a1a"] },
-    { x: [roadEdges.left - 6, roadEdges.left - 0.5], z: [-9, -22], n: 5000, cols: ["#b84a1a", "#c87024", "#9a3414"] },
-    { x: [roadEdges.right + 0.8, roadEdges.right + 6], z: [-4, -30], n: 4000, cols: ["#a86a34", "#c08a4a", "#8a5428"] },
+    { x: [roadEdges.left - 3.5, roadEdges.left - 0.2], z: [-3, -9], n: 10000, cols: [...palettes.red, "#c25a1a"] },
+    { x: [roadEdges.left - 6, roadEdges.left - 0.5], z: [-9, -22], n: 5500, cols: ["#b84a1a", "#c87024", "#9a3414"] },
+    { x: [roadEdges.right + 0.8, roadEdges.right + 6], z: [-4, -30], n: 4500, cols: ["#a86a34", "#c08a4a", "#8a5428"] },
   ];
   const all = drifts.flatMap((d) => Array.from({ length: Math.round(d.n * params.density) }, () => d));
-  const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.11, 0.08).rotateX(-Math.PI / 2),
-    new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }), all.length);
+  const mesh = new THREE.InstancedMesh(
+    new THREE.PlaneGeometry(0.11, 0.08).rotateX(-Math.PI / 2),
+    new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }),
+    all.length,
+  );
   const c = new THREE.Color();
   all.forEach((d, i) => {
     const t = Math.pow(r(), 0.6), x = d.x[1] + (d.x[0] - d.x[1]) * t * (0.4 + 0.6 * r());
@@ -101,7 +92,7 @@ function railing() {
 function farAvenue(): BuiltTree[] {
   const r = rng(77), out: BuiltTree[] = [];
   for (const row of farRows)
-    for (let z = row.from; z < row.to; z += row.step) {
+    for (let z = row.from; z < row.to; z += row.step * 0.85) {
       const x = (row.side < 0 ? roadEdges.left : roadEdges.right) + row.side * (row.offset + r() * 2);
       out.push(buildFarTree(new THREE.Vector3(x, 0, -z - r() * 3), r() * 1000, row.side));
     }
@@ -129,23 +120,27 @@ function skyGradient() {
   const c = document.createElement("canvas");
   c.width = 1; c.height = 256;
   const g = c.getContext("2d")!, gr = g.createLinearGradient(0, 0, 0, 256);
-  gr.addColorStop(0, sky.top); gr.addColorStop(0.75, sky.horizon); gr.addColorStop(1, sky.horizon);
+  gr.addColorStop(0, sky.top); gr.addColorStop(0.72, sky.horizon); gr.addColorStop(1, "#8e9096");
   g.fillStyle = gr; g.fillRect(0, 0, 1, 256);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
 
-export function buildWorld(scene: THREE.Scene) {
-  const roadMesh = road(scene.environment);
-  scene.add(roadMesh);
+export function buildWorld(scene: THREE.Scene, backend: Backend) {
   if (params.mask) {
-    roadMesh.material = new THREE.MeshBasicMaterial({ color: "#fff" }) as never;
+    scene.add(roadMaskMesh());
     return { tick: (_: number) => {}, stats: { leaves: 0 } };
   }
+  scene.add(wetRoad(scene.environment, backend));
   scene.add(verge(-1), verge(1), fallenLeaves(), lampPosts(), railing());
   const built = [...trees.map((t, i) => buildTree(t, params.seed * 100 + i)), ...farAvenue()];
-  scene.add(woodMesh(built.flatMap((b) => b.wood)));
+  const allWood = [
+    ...built.flatMap((b) => b.wood),
+    ...fogBranchFill(params.seed + 99),
+    ...rightTwigWeb(params.seed + 123),
+  ];
+  scene.add(woodMesh(allWood));
   const leaves = built.flatMap((b) => b.leaves);
   scene.add(leafMesh(leaves, params.seed));
   const snow = params.snow ? fallingSnow() : null;

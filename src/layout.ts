@@ -35,4 +35,4 @@ export const farRows = [{ side: -1, offset: 2, from: 34, to: 170, step: 7 }, { s
 export const lamps: [number, number, number][] = [[0.27, 0.785, 0.63], [0.3, 0.775, 0.65]];
 /** Railing starts under photo pixel (u, vBase), runs parallel to the road; height solved from vTop. */
 export const fence = { u: 1.0, vBase: 0.785, vTop: 0.74 } as const;
-export const sky = { top: "#d4d8e2", horizon: "#a6a8ae", fog: "#aaadb3", fogDensity: 0.016 };
+export const sky = { top: "#d4d8e2", horizon: "#a6a8ae", fog: "#98999d", fogDensity: 0.0185 };

@@ -1,3 +1,6 @@
-node_modules
-dist
 *.log
+.DS_Store
+dist
+dist/
+node_modules
+node_modules/

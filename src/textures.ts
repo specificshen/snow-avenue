@@ -17,26 +17,40 @@ function leafPath(g: CanvasRenderingContext2D, maple: boolean) {
   } else g.ellipse(0, 0, 0.55, 1, 0, 0, Math.PI * 2);
   g.fill();
 }
-/** A clump of white-ish leaves with alpha; tinted per instance. Value carries leaf shading. */
+/** Soft-edged leaf clump — feathered alpha reduces paper-cutout silhouettes. */
 export function leafClump(seed: number, maple: boolean) {
   const S = 256, [c, g] = canvas(S, S), r = rng(seed);
-  for (let i = 0; i < 90; i++) {
-    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * S * 0.38;
+  // soft radial falloff under the leaves
+  const soft = g.createRadialGradient(S / 2, S / 2, S * 0.05, S / 2, S / 2, S * 0.48);
+  soft.addColorStop(0, "rgba(255,255,255,0.0)");
+  soft.addColorStop(1, "rgba(255,255,255,0.0)");
+  g.fillStyle = soft; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 120; i++) {
+    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * S * 0.4;
     g.save();
     g.translate(S / 2 + Math.cos(a) * d, S / 2 + Math.sin(a) * d);
     g.rotate(r() * Math.PI * 2);
-    const s = S * (0.05 + r() * 0.04);
+    const s = S * (0.035 + r() * 0.035);
     g.scale(s, s);
-    const v = 205 + r() * 50;
+    const v = 200 + r() * 55;
+    g.globalAlpha = 0.55 + r() * 0.4;
     g.fillStyle = `rgb(${v},${v * (0.92 + r() * 0.08)},${v * (0.85 + r() * 0.1)})`;
     leafPath(g, maple);
     g.restore();
   }
+  // feather outer alpha
+  const img = g.getImageData(0, 0, S, S), d = img.data, cx = S / 2, cy = S / 2, maxR = S * 0.48;
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const i = (y * S + x) * 4;
+    if (d[i + 3] === 0) continue;
+    const rr = Math.hypot(x - cx, y - cy) / maxR;
+    if (rr > 0.7) d[i + 3] = Math.round(d[i + 3] * Math.max(0, 1 - (rr - 0.7) / 0.3));
+  }
+  g.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
-/** Snow verge: white with grey grain, optional fallen-leaf speckles baked in. */
 export function snowTexture(seed: number, leaves: string[], leafAmount: number) {
   const S = 512, [c, g] = canvas(S, S), r = rng(seed);
   g.fillStyle = "#d6d7db"; g.fillRect(0, 0, S, S);
@@ -57,7 +71,6 @@ export function snowTexture(seed: number, leaves: string[], leafAmount: number) 
   t.anisotropy = 4;
   return t;
 }
-/** Wet asphalt: albedo + roughness (puddles are smoother). Road runs along the texture's v axis. */
 export function roadTextures(seed: number) {
   const W = 256, H = 2048, r = rng(seed);
   const [c, g] = canvas(W, H), [rc, rg] = canvas(W, H);

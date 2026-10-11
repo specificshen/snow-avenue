@@ -2,6 +2,7 @@ const q = new URLSearchParams(location.search);
 export type Quality = "low" | "medium" | "high";
 const quality = (["low", "medium", "high"].includes(q.get("quality") ?? "") ? q.get("quality") : "medium") as Quality;
 const size = q.get("size")?.match(/^(\d+)x(\d+)$/);
+const rendererQ = q.get("renderer");
 export const params = {
   quality,
   density: { low: 0.35, medium: 0.7, high: 1 }[quality],
@@ -11,6 +12,8 @@ export const params = {
   fixed: q.has("fixed"),
   seed: Number(q.get("seed") ?? 7),
   size: size ? { w: Number(size[1]), h: Number(size[2]) } : null,
+  /** auto tries WebGPU then falls back; capture should force webgl (Reflector needs it) */
+  renderer: (rendererQ === "webgl" || rendererQ === "webgpu" ? rendererQ : "auto") as "auto" | "webgl" | "webgpu",
 };
 export function rng(seed: number) {
   let a = seed >>> 0;

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { atDepth, ground, widthAt, shot } from "./camera";
 import { palettes, type TreeSpec } from "./layout";
 import { params, rng } from "./params";
@@ -59,13 +59,18 @@ export function buildTree(spec: TreeSpec, seed: number): BuiltTree {
       const r0 = root === top ? Math.max(0.03, spec.trunk * wpu * 0.45) : 0.1;
       const knee = from.clone().lerp(tip, 0.5).add(new THREE.Vector3((rand() - 0.5) * b.r * 0.5, b.r * 0.2, (rand() - 0.5) * b.r * 0.3));
       wood.push(limb(from, knee, r0, r0 * 0.6, snow, rand), limb(knee, tip, r0 * 0.6, 0.012, snow, rand));
-      for (let k = 0; k < 3; k++) {
-        const t = knee.clone().lerp(tip, 0.2 + rand() * 0.6);
-        const twig = t.clone().add(new THREE.Vector3((rand() - 0.5) * b.r * 0.8, rand() * b.r * 0.5, (rand() - 0.5) * b.r * 0.5));
-        wood.push(limb(t, twig, r0 * 0.3, 0.008, snow, rand));
+      const twigN = (spec.branchiness ?? 1) > 1.5 ? 8 : 3;
+      for (let k = 0; k < twigN; k++) {
+        const t = knee.clone().lerp(tip, 0.15 + rand() * 0.7);
+        const twig = t.clone().add(new THREE.Vector3((rand() - 0.5) * b.r * 1.1, rand() * b.r * 0.7, (rand() - 0.5) * b.r * 0.7));
+        wood.push(limb(t, twig, r0 * 0.28, 0.006, snow * 1.3, rand));
+        if ((spec.branchiness ?? 1) > 1.5 && rand() < 0.55) {
+          const tw2 = twig.clone().add(new THREE.Vector3((rand() - 0.5) * b.r * 0.7, rand() * b.r * 0.4, (rand() - 0.5) * b.r * 0.5));
+          wood.push(limb(twig, tw2, 0.01, 0.004, snow * 1.6, rand));
+        }
       }
     }
-    const count = Math.round(b.r * b.r * 40 * params.density * (spec.leafiness ?? 1) / spec.leafSize);
+    const count = Math.round(b.r * b.r * 52 * params.density * (spec.leafiness ?? 1) / spec.leafSize);
     for (let i = 0; i < count; i++) {
       const d = new THREE.Vector3().randomDirection().multiplyScalar(Math.pow(rand(), 0.35));
       d.y *= 0.85;
@@ -74,7 +79,7 @@ export function buildTree(spec: TreeSpec, seed: number): BuiltTree {
       const shade = 0.82 + 0.25 * (d.y * 0.5 + 0.5);
       col.multiplyScalar(shade);
       if (rand() < spec.snow * (d.y > 0 ? 1.3 : 0.4)) col.lerp(snowWhite, 0.55 + rand() * 0.3);
-      leaves.push({ pos, size: spec.leafSize * 0.85 * (0.8 + rand() * 0.6) * (1 + depth / 40), color: col, rot: rand() * 6.28 });
+      leaves.push({ pos, size: spec.leafSize * 0.7 * (0.75 + rand() * 0.5) * (1 + depth / 40), color: col, rot: rand() * 6.28 });
     }
   }
   return { wood, leaves };
@@ -84,7 +89,7 @@ export function buildTree(spec: TreeSpec, seed: number): BuiltTree {
 export function leafMesh(all: BuiltTree["leaves"], seed: number) {
   const geo = new THREE.PlaneGeometry(1, 1);
   const mats = [true, false].map((maple, i) =>
-    new THREE.MeshBasicMaterial({ map: leafClump(seed + i, maple), alphaTest: 0.45, side: THREE.DoubleSide }));
+    new THREE.MeshBasicMaterial({ map: leafClump(seed + i, maple), alphaTest: 0.2, transparent: true, depthWrite: true, side: THREE.DoubleSide }));
   const group = new THREE.Group();
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3();
   mats.forEach((mat, mi) => {
@@ -111,15 +116,59 @@ export function buildFarTree(base: THREE.Vector3, seed: number, side: number): B
   const rand = rng(seed), wood: THREE.BufferGeometry[] = [], leaves: BuiltTree["leaves"] = [];
   const h = 7 + rand() * 4, top = base.clone().add(new THREE.Vector3(side * 0.6, h, 0));
   wood.push(limb(base.clone().setY(-0.2), top, 0.22, 0.1, 0.4, rand));
-  for (let i = 0; i < 12; i++) {
-    const from = base.clone().lerp(top, 0.45 + rand() * 0.5);
+  for (let i = 0; i < 16; i++) {
+    const from = base.clone().lerp(top, 0.4 + rand() * 0.55);
     const tip = from.clone().add(new THREE.Vector3((rand() - 0.5 - side * 0.3) * 7, 1.5 + rand() * 4, (rand() - 0.5) * 4));
-    wood.push(limb(from, tip, 0.08, 0.015, 1.6, rand));
-    for (let k = 0; k < 6 * params.density; k++) {
+    wood.push(limb(from, tip, 0.07, 0.012, 1.8, rand));
+    for (let t = 0; t < 4; t++) {
+      const a = from.clone().lerp(tip, 0.3 + rand() * 0.6);
+      wood.push(limb(a, a.clone().add(new THREE.Vector3((rand()-0.5)*2.5, rand()*2, (rand()-0.5)*2)), 0.02, 0.005, 2.0, rand));
+    }
+    for (let k = 0; k < 5 * params.density; k++) {
       const col = new THREE.Color(palettes.ochre[Math.floor(rand() * palettes.ochre.length)]);
-      if (rand() < 0.4) col.lerp(snowWhite, 0.6);
-      leaves.push({ pos: from.clone().lerp(tip, 0.4 + rand() * 0.7).add(new THREE.Vector3().randomDirection().multiplyScalar(1.2)), size: 1.3, color: col, rot: rand() * 6.28 });
+      if (rand() < 0.45) col.lerp(snowWhite, 0.6);
+      leaves.push({ pos: from.clone().lerp(tip, 0.4 + rand() * 0.7).add(new THREE.Vector3().randomDirection().multiplyScalar(1.1)), size: 1.1, color: col, rot: rand() * 6.28 });
     }
   }
   return { wood, leaves };
+}
+
+
+/** Mid-fog silhouette fill: sparse snowy twigs so the bright fog band is not empty. */
+export function fogBranchFill(seed: number): THREE.BufferGeometry[] {
+  const rand = rng(seed), wood: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 40; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const z = -30 - rand() * 85;
+    const x = side * (4 + rand() * 9);
+    const base = new THREE.Vector3(x, -0.1, z);
+    const h = 7 + rand() * 9;
+    const top = base.clone().add(new THREE.Vector3(side * rand(), h, (rand() - 0.5) * 3));
+    wood.push(limb(base, top, 0.05, 0.018, 1.8, rand));
+    for (let k = 0; k < 6; k++) {
+      const from = base.clone().lerp(top, 0.3 + rand() * 0.6);
+      const tip = from.clone().add(new THREE.Vector3((rand() - 0.5) * 5, (rand() - 0.2) * 3.5, (rand() - 0.5) * 4));
+      wood.push(limb(from, tip, 0.016, 0.005, 2.2, rand));
+    }
+  }
+  return wood;
+}
+
+/** Right-side snowy twig accents (photo: fine frosted branch web). */
+export function rightTwigWeb(seed: number): THREE.BufferGeometry[] {
+  const rand = rng(seed), wood: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 14; i++) {
+    const u = 0.62 + rand() * 0.35;
+    const depth = 14 + rand() * 40;
+    const base = new THREE.Vector3(atDepth(u, 0.5, depth).x, -0.05, -depth);
+    const h = 6 + rand() * 10;
+    const top = base.clone().add(new THREE.Vector3(-0.5 - rand(), h, (rand() - 0.5) * 2));
+    wood.push(limb(base, top, 0.035, 0.01, 2.5, rand));
+    for (let k = 0; k < 9; k++) {
+      const from = base.clone().lerp(top, 0.25 + rand() * 0.7);
+      const tip = from.clone().add(new THREE.Vector3(-0.8 - rand() * 3.5, (rand() - 0.15) * 2.8, (rand() - 0.5) * 2.5));
+      wood.push(limb(from, tip, 0.012, 0.004, 2.8, rand));
+    }
+  }
+  return wood;
 }
