@@ -71,37 +71,93 @@ export function snowTexture(seed: number, leaves: string[], leafAmount: number) 
 }
 
 export function roadTextures(seed: number) {
-  const W = 256, H = 2048, r = rng(seed);
+  const W = 512, H = 2048, r = rng(seed);
   const [c, g] = canvas(W, H), [rc, rg] = canvas(W, H);
-  g.fillStyle = "#1e2022"; g.fillRect(0, 0, W, H);
-  rg.fillStyle = "#6a6a6a"; rg.fillRect(0, 0, W, H);
-  for (let i = 0; i < 9000; i++) {
-    const v = 18 + r() * 30;
-    g.fillStyle = `rgba(${v},${v + 2},${v + 5},0.35)`;
+  // muddy dark asphalt base (warm-grey, not pure black)
+  g.fillStyle = "#4a4642"; g.fillRect(0, 0, W, H);
+  rg.fillStyle = "#9a9a9a"; rg.fillRect(0, 0, W, H); // start rough
+
+  // fine grit
+  for (let i = 0; i < 28000; i++) {
+    const v = 40 + r() * 45;
+    const warm = r() * 8;
+    g.fillStyle = `rgba(${v + warm},${v + 2},${v},0.4)`;
     g.fillRect(r() * W, r() * H, 1 + r() * 2, 1 + r() * 2);
   }
-  for (let i = 0; i < 260; i++) {
-    const x = r() * W, y = r() * H, w = 10 + r() * 60, h = 30 + r() * 220;
-    const gr = rg.createRadialGradient(x, y, 0, x, y, Math.max(w, h));
-    gr.addColorStop(0, "rgba(20,20,20,0.6)"); gr.addColorStop(1, "rgba(20,20,20,0)");
-    rg.fillStyle = gr; rg.fillRect(x - w * 2, y - h * 2, w * 4, h * 4);
+  // tyre / wet longitudinal streaks (broken, not clean lines)
+  for (let s = 0; s < 14; s++) {
+    const x0 = W * (0.08 + r() * 0.84);
+    const wobble = 3 + r() * 8;
+    for (let y = 0; y < H; y += 1) {
+      if (r() < 0.15) continue; // broken streak
+      const x = x0 + Math.sin(y * 0.008 + s) * wobble + (r() - 0.5) * 1.5;
+      const dark = 18 + r() * 22;
+      g.fillStyle = `rgba(${dark + 6},${dark + 2},${dark},0.35)`;
+      g.fillRect(x, y, 1.2 + r() * 2.5, 2);
+      // wetter = darker + smoother
+      rg.fillStyle = `rgba(${40 + r() * 30},${40 + r() * 30},${40 + r() * 30},0.45)`;
+      rg.fillRect(x - 0.5, y, 3 + r() * 3, 2);
+    }
   }
-  // nearer road (texture v near 1 / bottom of view when mapped) slightly smoother = wetter
-  for (let y = 0; y < H * 0.25; y++) {
-    const t = 1 - y / (H * 0.25);
-    rg.fillStyle = `rgba(30,30,30,${0.25 * t})`;
-    rg.fillRect(0, H - 1 - y, W, 1);
+  // puddle mottling: dark wet patches (smooth in roughness)
+  for (let i = 0; i < 420; i++) {
+    const x = r() * W, y = r() * H;
+    const w = 8 + r() * 70, h = 12 + r() * 160;
+    const mud = 28 + r() * 24;
+    const gr = g.createRadialGradient(x, y, 0, x, y, Math.max(w, h));
+    gr.addColorStop(0, `rgba(${mud + 10},${mud + 6},${mud},0.75)`);
+    gr.addColorStop(0.55, `rgba(${mud + 8},${mud + 4},${mud},0.35)`);
+    gr.addColorStop(1, `rgba(${mud},${mud},${mud},0)`);
+    g.fillStyle = gr; g.fillRect(x - w * 2, y - h * 2, w * 4, h * 4);
+    const rr = rg.createRadialGradient(x, y, 0, x, y, Math.max(w, h));
+    rr.addColorStop(0, "rgba(15,15,15,0.85)"); // smooth wet
+    rr.addColorStop(0.6, "rgba(40,40,40,0.4)");
+    rr.addColorStop(1, "rgba(40,40,40,0)");
+    rg.fillStyle = rr; rg.fillRect(x - w * 2, y - h * 2, w * 4, h * 4);
   }
-  g.fillStyle = "rgba(15,16,18,0.9)";
-  for (let y = 0; y < H; y += 2) g.fillRect(W * 0.5 + Math.sin(y * 0.01) * 2 + (r() - 0.5) * 1.5, y, 2.2, 2);
-  rg.fillStyle = "#222"; rg.fillRect(W * 0.5 - 2, 0, 4, H);
-  const leafCols = ["#9a4a18", "#b8701e", "#7a2a12", "#c48a2a", "#5a3a20"];
-  for (let i = 0; i < 380; i++) {
-    g.save(); g.translate(r() * W, r() * H); g.rotate(r() * 6.3);
-    const s = 1.5 + r() * 2.5; g.scale(s, s * 2.2);
+  // dry patches (rougher, slightly lighter)
+  for (let i = 0; i < 180; i++) {
+    const x = r() * W, y = r() * H, w = 15 + r() * 50, h = 20 + r() * 90;
+    g.fillStyle = `rgba(70,65,58,${0.08 + r() * 0.12})`;
+    g.beginPath(); g.ellipse(x, y, w, h, r() * 3, 0, Math.PI * 2); g.fill();
+    rg.fillStyle = `rgba(200,200,200,${0.25 + r() * 0.35})`;
+    rg.beginPath(); rg.ellipse(x, y, w, h, 0, 0, Math.PI * 2); rg.fill();
+  }
+  // worn centre seam
+  g.fillStyle = "rgba(12,12,14,0.85)";
+  for (let y = 0; y < H; y += 2) {
+    g.fillRect(W * 0.5 + Math.sin(y * 0.012) * 2.5 + (r() - 0.5) * 2, y, 2.5, 2);
+  }
+  rg.fillStyle = "#181818"; rg.fillRect(W * 0.5 - 3, 0, 6, H);
+
+  // leaf litter — denser toward near end of texture (high v = near camera when mapped)
+  const leafCols = ["#9a4a18", "#b8701e", "#7a2a12", "#c48a2a", "#5a3a20", "#a85820", "#6b3010", "#d49830"];
+  for (let i = 0; i < 2400; i++) {
+    // bias toward bottom half of texture (near road in view)
+    const yBias = Math.pow(r(), 0.55);
+    const y = H * (0.35 + 0.65 * yBias);
+    const x = r() * W;
+    g.save();
+    g.translate(x, y);
+    g.rotate(r() * 6.3);
+    const s = 2.5 + r() * 5.5;
+    g.scale(s, s * (1.6 + r()));
+    g.globalAlpha = 0.75 + r() * 0.25;
     g.fillStyle = leafCols[Math.floor(r() * leafCols.length)];
-    leafPath(g, r() < 0.5); g.restore();
+    leafPath(g, r() < 0.55);
+    g.restore();
+    // leaves add micro roughness
+    rg.fillStyle = "rgba(160,160,160,0.35)";
+    rg.fillRect(x - 2, y - 2, 4, 4);
   }
+  // mud splatter / brown wash near edges
+  for (let i = 0; i < 80; i++) {
+    const side = r() < 0.5 ? r() * W * 0.2 : W * (0.8 + r() * 0.2);
+    const y = r() * H;
+    g.fillStyle = `rgba(55,42,28,${0.12 + r() * 0.2})`;
+    g.beginPath(); g.ellipse(side, y, 10 + r() * 30, 8 + r() * 25, 0, 0, Math.PI * 2); g.fill();
+  }
+
   const map = new THREE.CanvasTexture(c), rough = new THREE.CanvasTexture(rc);
   map.colorSpace = THREE.SRGBColorSpace;
   for (const t of [map, rough]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; }

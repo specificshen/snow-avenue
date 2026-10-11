@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { params } from "./params";
-import { roadTextures } from "./textures";
+import { leafClump, roadTextures } from "./textures";
 import { FAR, roadEdges } from "./world-shared";
 
 export type PlanarReflection = {
@@ -37,19 +37,19 @@ export function wetRoadWithReflection(env: THREE.Texture | null, backend: "webgp
     map,
     roughnessMap: rough,
     envMap: env ?? undefined,
-    color: "#3a3c40",
-    roughness: 0.68,
+    color: "#726b64", // warm muddy asphalt
+    roughness: 0.72,
     metalness: 0,
-    clearcoat: 0.22,
-    clearcoatRoughness: 0.45,
-    envMapIntensity: useReflect ? 0.35 : 0.55,
+    clearcoat: 0.18,
+    clearcoatRoughness: 0.55,
+    envMapIntensity: useReflect ? 0.28 : 0.45,
   });
 
   if (rt) {
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.tPlanarReflect = { value: rt.texture };
       shader.uniforms.uReflectMatrix = { value: reflectorMatrix };
-      shader.uniforms.uReflectMix = { value: 0.14 };
+      shader.uniforms.uReflectMix = { value: 0.12 };
       shader.uniforms.uReflectBlur = { value: 1.0 / rtSize };
       shader.vertexShader = shader.vertexShader
         .replace(
@@ -95,16 +95,20 @@ varying vec3 vPlanarWorldPos;
     }
   }
   refl /= wsum;
-  refl *= 0.58; // dull
+  refl *= 0.45; // dull muddy
   float nearWet = smoothstep( -40.0, -2.0, vPlanarWorldPos.z );
-  float roughF = pow( 1.0 - roughnessFactor, 1.5 );
-  float mixAmt = uReflectMix * roughF * edge * ( 0.35 + 0.45 * nearWet );
-  diffuseColor.rgb = mix( diffuseColor.rgb, refl, clamp( mixAmt, 0.0, 0.18 ) );
+  // broken wet: only smooth puddles pick up reflection
+  float wetMask = smoothstep( 0.55, 0.15, roughnessFactor );
+  float mixAmt = uReflectMix * wetMask * edge * ( 0.25 + 0.55 * nearWet );
+  diffuseColor.rgb = mix( diffuseColor.rgb, refl, clamp( mixAmt, 0.0, 0.22 ) );
+  // slight mud darken in near field
+  diffuseColor.rgb *= mix( 1.0, 0.95, nearWet * 0.35 );
 }
+
 `,
         );
     };
-    mat.customProgramCacheKey = () => "wet-planar-reflect-v7";
+    mat.customProgramCacheKey = () => "wet-planar-reflect-v11";
   }
 
   const mesh = new THREE.Mesh(geo, mat);
@@ -117,12 +121,46 @@ varying vec3 vPlanarWorldPos;
   // darker near band (photo: near asphalt is darker)
   const nearPad = new THREE.Mesh(
     new THREE.PlaneGeometry(w * 0.98, 16).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ color: "#0c0d0f", transparent: true, opacity: 0.06, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: "#0c0d0f", transparent: true, opacity: 0.04, depthWrite: false }),
   );
   nearPad.position.set(cx, 0.004, -1.5);
   nearPad.renderOrder = 2;
   nearPad.name = "roadNearPad";
   group.add(nearPad);
+
+
+  // leaf litter on wet asphalt — soft-alpha leaf cards, denser near camera like the photo
+  {
+    const r = (() => { let a = (params.seed + 91) >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })();
+    const n = Math.round(2200 * params.density);
+    const litter = new THREE.InstancedMesh(
+      new THREE.PlaneGeometry(0.16, 0.11).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({
+        map: leafClump(params.seed + 3, true),
+        alphaTest: 0.22,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+      n,
+    );
+    litter.name = "roadLitter";
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3();
+    const c = new THREE.Color();
+    const cols = ["#9a4a18", "#b8701e", "#7a2a12", "#c48a2a", "#5a3a20", "#a85820", "#8a4010"];
+    for (let i = 0; i < n; i++) {
+      const along = Math.pow(r(), 1.5);
+      const z = -0.5 - along * 18;
+      const x = cx + (r() - 0.5) * w * 0.78;
+      e.set((r() - 0.5) * 0.5, r() * 6.3, (r() - 0.5) * 0.5);
+      const sc = 0.55 + r() * 0.9;
+      m.compose(new THREE.Vector3(x, 0.012 + r() * 0.008, z), q.setFromEuler(e), s.set(sc * (0.8 + r() * 0.5), 1, sc));
+      litter.setMatrixAt(i, m);
+      litter.setColorAt(i, c.set(cols[Math.floor(r() * cols.length)]).multiplyScalar(0.7 + r() * 0.35));
+    }
+    litter.renderOrder = 3;
+    group.add(litter);
+  }
 
   const mirrorCam = new THREE.PerspectiveCamera();
   const clipPlane = new THREE.Plane();
