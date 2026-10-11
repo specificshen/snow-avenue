@@ -1,0 +1,14 @@
+{
+  "name": "snow-avenue",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit -p . && vite build",
+    "preview": "vite preview --port 4173",
+    "capture": "node scripts/capture.mjs",
+    "compare": "python3 tools/compare.py"
+  },
+  "dependencies": { "three": "^0.170.0" },
+  "devDependencies": { "@types/three": "^0.170.0", "typescript": "^5.6.0", "vite": "^6.0.0", "playwright": "^1.48.0" }
+}
