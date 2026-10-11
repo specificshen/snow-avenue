@@ -99,9 +99,9 @@ export function roadTextures(seed: number) {
     }
   }
   // small wet puddle mottling (keep wet sheen, no giant footprint blobs)
-  for (let i = 0; i < 780; i++) {
+  for (let i = 0; i < 900; i++) {
     const x = r() * W, y = r() * H;
-    const w = 5 + r() * 28, h = 6 + r() * 42;
+    const w = 3 + r() * 16, h = 4 + r() * 22;
     const mud = 24 + r() * 22;
     const gr = g.createRadialGradient(x, y, 0, x, y, Math.max(w, h));
     gr.addColorStop(0, `rgba(${mud + 10},${mud + 6},${mud},0.7)`);
@@ -114,12 +114,12 @@ export function roadTextures(seed: number) {
     rr.addColorStop(1, "rgba(40,40,40,0)");
     rg.fillStyle = rr; rg.fillRect(x - w * 2, y - h * 2, w * 4, h * 4);
   }
-  // dry patches (rougher, slightly lighter)
-  for (let i = 0; i < 180; i++) {
-    const x = r() * W, y = r() * H, w = 15 + r() * 50, h = 20 + r() * 90;
-    g.fillStyle = `rgba(70,65,58,${0.08 + r() * 0.12})`;
+  // small dry grit patches (keep micro variation, no giant ovals)
+  for (let i = 0; i < 220; i++) {
+    const x = r() * W, y = r() * H, w = 3 + r() * 12, h = 4 + r() * 16;
+    g.fillStyle = `rgba(70,65,58,${0.06 + r() * 0.1})`;
     g.beginPath(); g.ellipse(x, y, w, h, r() * 3, 0, Math.PI * 2); g.fill();
-    rg.fillStyle = `rgba(200,200,200,${0.25 + r() * 0.35})`;
+    rg.fillStyle = `rgba(200,200,200,${0.2 + r() * 0.3})`;
     rg.beginPath(); rg.ellipse(x, y, w, h, 0, 0, Math.PI * 2); rg.fill();
   }
   // worn centre seam
