@@ -38,18 +38,18 @@ export function wetRoadWithReflection(env: THREE.Texture | null, backend: "webgp
     roughnessMap: rough,
     envMap: env ?? undefined,
     color: "#726b64", // warm muddy asphalt
-    roughness: 0.72,
+    roughness: 0.55,
     metalness: 0,
-    clearcoat: 0.18,
-    clearcoatRoughness: 0.55,
-    envMapIntensity: useReflect ? 0.28 : 0.45,
+    clearcoat: 0.32,
+    clearcoatRoughness: 0.28,
+    envMapIntensity: useReflect ? 0.4 : 0.55,
   });
 
   if (rt) {
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.tPlanarReflect = { value: rt.texture };
       shader.uniforms.uReflectMatrix = { value: reflectorMatrix };
-      shader.uniforms.uReflectMix = { value: 0.12 };
+      shader.uniforms.uReflectMix = { value: 0.24 };
       shader.uniforms.uReflectBlur = { value: 1.0 / rtSize };
       shader.vertexShader = shader.vertexShader
         .replace(
@@ -100,7 +100,7 @@ varying vec3 vPlanarWorldPos;
   // broken wet: only smooth puddles pick up reflection
   float wetMask = smoothstep( 0.55, 0.15, roughnessFactor );
   float mixAmt = uReflectMix * wetMask * edge * ( 0.25 + 0.55 * nearWet );
-  diffuseColor.rgb = mix( diffuseColor.rgb, refl, clamp( mixAmt, 0.0, 0.22 ) );
+  diffuseColor.rgb = mix( diffuseColor.rgb, refl, clamp( mixAmt, 0.0, 0.32 ) );
   // slight mud darken in near field
   diffuseColor.rgb *= mix( 1.0, 0.95, nearWet * 0.35 );
 }
@@ -108,7 +108,7 @@ varying vec3 vPlanarWorldPos;
 `,
         );
     };
-    mat.customProgramCacheKey = () => "wet-planar-reflect-v11";
+    mat.customProgramCacheKey = () => "wet-planar-reflect-v13-wet-slim";
   }
 
   const mesh = new THREE.Mesh(geo, mat);
@@ -132,9 +132,9 @@ varying vec3 vPlanarWorldPos;
   // leaf litter on wet asphalt — soft-alpha leaf cards, denser near camera like the photo
   {
     const r = (() => { let a = (params.seed + 91) >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })();
-    const n = Math.round(2200 * params.density);
+    const n = Math.round(700 * params.density);
     const litter = new THREE.InstancedMesh(
-      new THREE.PlaneGeometry(0.16, 0.11).rotateX(-Math.PI / 2),
+      new THREE.PlaneGeometry(0.1, 0.07).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({
         map: leafClump(params.seed + 3, true),
         alphaTest: 0.22,
@@ -153,7 +153,7 @@ varying vec3 vPlanarWorldPos;
       const z = -0.5 - along * 18;
       const x = cx + (r() - 0.5) * w * 0.78;
       e.set((r() - 0.5) * 0.5, r() * 6.3, (r() - 0.5) * 0.5);
-      const sc = 0.55 + r() * 0.9;
+      const sc = 0.35 + r() * 0.5;
       m.compose(new THREE.Vector3(x, 0.012 + r() * 0.008, z), q.setFromEuler(e), s.set(sc * (0.8 + r() * 0.5), 1, sc));
       litter.setMatrixAt(i, m);
       litter.setColorAt(i, c.set(cols[Math.floor(r() * cols.length)]).multiplyScalar(0.7 + r() * 0.35));
