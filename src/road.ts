@@ -37,19 +37,19 @@ export function wetRoadWithReflection(env: THREE.Texture | null, backend: "webgp
     map,
     roughnessMap: rough,
     envMap: env ?? undefined,
-    color: "#726b64", // warm muddy asphalt
-    roughness: 0.55,
+    color: "#68635e",
+    roughness: 0.62,
     metalness: 0,
-    clearcoat: 0.32,
-    clearcoatRoughness: 0.28,
-    envMapIntensity: useReflect ? 0.4 : 0.55,
+    clearcoat: 0.45,
+    clearcoatRoughness: 0.22,
+    envMapIntensity: useReflect ? 0.35 : 0.5,
   });
 
   if (rt) {
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.tPlanarReflect = { value: rt.texture };
       shader.uniforms.uReflectMatrix = { value: reflectorMatrix };
-      shader.uniforms.uReflectMix = { value: 0.24 };
+      shader.uniforms.uReflectMix = { value: 0.5 };
       shader.uniforms.uReflectBlur = { value: 1.0 / rtSize };
       shader.vertexShader = shader.vertexShader
         .replace(
@@ -84,7 +84,7 @@ varying vec3 vPlanarWorldPos;
   float edge = smoothstep( 0.0, 0.1, rq.x ) * smoothstep( 1.0, 0.9, rq.x )
              * smoothstep( 0.0, 0.08, rq.y ) * smoothstep( 1.0, 0.92, rq.y );
   // wide multi-tap blur: wet asphalt streak, not chrome
-  vec2 px = vec2( uReflectBlur * 5.0, uReflectBlur * 3.0 );
+  vec2 px = vec2( uReflectBlur * 7.0, uReflectBlur * 1.6 ); // wide H, tight V = streaky wet tracks
   vec3 refl = vec3( 0.0 );
   float wsum = 0.0;
   for ( int iy = -2; iy <= 2; iy++ ) {
@@ -95,20 +95,22 @@ varying vec3 vPlanarWorldPos;
     }
   }
   refl /= wsum;
-  refl *= 0.45; // dull muddy
-  float nearWet = smoothstep( -40.0, -2.0, vPlanarWorldPos.z );
-  // broken wet: only smooth puddles pick up reflection
-  float wetMask = smoothstep( 0.55, 0.15, roughnessFactor );
-  float mixAmt = uReflectMix * wetMask * edge * ( 0.25 + 0.55 * nearWet );
-  diffuseColor.rgb = mix( diffuseColor.rgb, refl, clamp( mixAmt, 0.0, 0.32 ) );
-  // slight mud darken in near field
-  diffuseColor.rgb *= mix( 1.0, 0.95, nearWet * 0.35 );
+  // dark wet: reflection adds cool sheen without brightening into grey bands
+  refl = pow( max( refl, vec3( 0.0 ) ), vec3( 1.15 ) ) * 0.28;
+  refl *= vec3( 0.85, 0.92, 1.05 ); // slight cool sky tint
+  float nearWet = smoothstep( -35.0, -1.0, vPlanarWorldPos.z );
+  float wetMask = smoothstep( 0.48, 0.1, roughnessFactor );
+  float mixAmt = uReflectMix * wetMask * edge * ( 0.4 + 0.6 * nearWet );
+  // deepen wet asphalt then lift a little with sheen
+  vec3 wetBase = diffuseColor.rgb * 0.85;
+  diffuseColor.rgb = mix( diffuseColor.rgb, wetBase + refl, clamp( mixAmt, 0.0, 0.55 ) );
 }
+
 
 `,
         );
     };
-    mat.customProgramCacheKey = () => "wet-planar-reflect-v13-wet-slim";
+    mat.customProgramCacheKey = () => "wet-planar-reflect-v17";
   }
 
   const mesh = new THREE.Mesh(geo, mat);
@@ -132,9 +134,9 @@ varying vec3 vPlanarWorldPos;
   // leaf litter on wet asphalt — soft-alpha leaf cards, denser near camera like the photo
   {
     const r = (() => { let a = (params.seed + 91) >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })();
-    const n = Math.round(700 * params.density);
+    const n = Math.round(480 * params.density);
     const litter = new THREE.InstancedMesh(
-      new THREE.PlaneGeometry(0.1, 0.07).rotateX(-Math.PI / 2),
+      new THREE.PlaneGeometry(0.06, 0.04).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({
         map: leafClump(params.seed + 3, true),
         alphaTest: 0.22,
@@ -150,10 +152,10 @@ varying vec3 vPlanarWorldPos;
     const cols = ["#9a4a18", "#b8701e", "#7a2a12", "#c48a2a", "#5a3a20", "#a85820", "#8a4010"];
     for (let i = 0; i < n; i++) {
       const along = Math.pow(r(), 1.5);
-      const z = -0.5 - along * 18;
+      const z = -0.6 - along * 14;
       const x = cx + (r() - 0.5) * w * 0.78;
       e.set((r() - 0.5) * 0.5, r() * 6.3, (r() - 0.5) * 0.5);
-      const sc = 0.35 + r() * 0.5;
+      const sc = 0.22 + r() * 0.35;
       m.compose(new THREE.Vector3(x, 0.012 + r() * 0.008, z), q.setFromEuler(e), s.set(sc * (0.8 + r() * 0.5), 1, sc));
       litter.setMatrixAt(i, m);
       litter.setColorAt(i, c.set(cols[Math.floor(r() * cols.length)]).multiplyScalar(0.7 + r() * 0.35));

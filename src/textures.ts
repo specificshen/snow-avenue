@@ -73,88 +73,86 @@ export function snowTexture(seed: number, leaves: string[], leafAmount: number) 
 export function roadTextures(seed: number) {
   const W = 512, H = 2048, r = rng(seed);
   const [c, g] = canvas(W, H), [rc, rg] = canvas(W, H);
-  // muddy dark asphalt base (warm-grey, not pure black)
-  g.fillStyle = "#4a4642"; g.fillRect(0, 0, W, H);
-  rg.fillStyle = "#9a9a9a"; rg.fillRect(0, 0, W, H); // start rough
+  // warm mid asphalt closer to photo near (#5e4f4e-ish)
+  g.fillStyle = "#524f4c"; g.fillRect(0, 0, W, H);
+  rg.fillStyle = "#a8a8a8"; rg.fillRect(0, 0, W, H);
 
-  // fine grit
-  for (let i = 0; i < 28000; i++) {
-    const v = 40 + r() * 45;
-    const warm = r() * 8;
-    g.fillStyle = `rgba(${v + warm},${v + 2},${v},0.4)`;
-    g.fillRect(r() * W, r() * H, 1 + r() * 2, 1 + r() * 2);
+  // fine grain
+  for (let i = 0; i < 90000; i++) {
+    const v = 48 + r() * 55;
+    const warm = r() * 12;
+    g.fillStyle = `rgba(${v + warm},${v + 4},${v},0.55)`;
+    g.fillRect(r() * W, r() * H, 1, 1);
   }
-  // thin broken tyre / wet streaks (keep wet, avoid huge footprint blobs)
-  for (let s = 0; s < 6; s++) {
-    const x0 = W * (0.18 + r() * 0.64);
-    const wobble = 0.8 + r() * 2.2;
-    for (let y = 0; y < H; y += 2) {
-      if (r() < 0.35) continue;
-      const x = x0 + Math.sin(y * 0.01 + s) * wobble + (r() - 0.5) * 0.8;
-      const dark = 22 + r() * 20;
-      g.fillStyle = `rgba(${dark + 6},${dark + 2},${dark},0.28)`;
-      g.fillRect(x, y, 0.8 + r() * 1.2, 2);
-      rg.fillStyle = `rgba(${35 + r() * 25},${35 + r() * 25},${35 + r() * 25},0.4)`;
-      rg.fillRect(x - 0.3, y, 1.5 + r() * 1.5, 2);
+  for (let i = 0; i < 25000; i++) {
+    const v = 130 + r() * 90;
+    rg.fillStyle = `rgba(${v},${v},${v},0.3)`;
+    rg.fillRect(r() * W, r() * H, 1 + r(), 1 + r());
+  }
+
+  // soft dark wet tyre bands (no 1px scanlines) — darker + smoother for broken reflection
+  const tracks = [W * 0.3, W * 0.7];
+  for (const x0 of tracks) {
+    for (let i = 0; i < 120; i++) {
+      const y = r() * H;
+      const len = 40 + r() * 180;
+      const half = 10 + r() * 14;
+      const x = x0 + (r() - 0.5) * 14;
+      // broken: skip some segments
+      if (r() < 0.22) continue;
+      const gr = g.createRadialGradient(x, y + len * 0.3, 0, x, y + len * 0.3, half * 1.4);
+      const d = 36 + r() * 18;
+      gr.addColorStop(0, `rgba(${d + 4},${d + 2},${d},0.4)`);
+      gr.addColorStop(1, `rgba(${d},${d},${d},0)`);
+      g.fillStyle = gr;
+      g.fillRect(x - half * 2, y, half * 4, len);
+      // roughness soft streak
+      const rr = rg.createLinearGradient(x - half, y, x + half, y);
+      rr.addColorStop(0, "rgba(40,40,40,0)");
+      rr.addColorStop(0.5, "rgba(22,22,22,0.7)");
+      rr.addColorStop(1, "rgba(40,40,40,0)");
+      rg.fillStyle = rr;
+      rg.fillRect(x - half, y, half * 2, len);
+    }
+    // a few thin darker wet streaks inside band
+    for (let i = 0; i < 25; i++) {
+      const y = r() * H, len = 30 + r() * 100;
+      const x = x0 + (r() - 0.5) * 18;
+      g.fillStyle = `rgba(20,22,26,${0.25 + r() * 0.25})`;
+      g.fillRect(x - 1, y, 2 + r() * 2, len);
+      rg.fillStyle = "rgba(12,12,12,0.65)";
+      rg.fillRect(x - 1, y, 2 + r() * 2, len);
     }
   }
-  // small wet puddle mottling (keep wet sheen, no giant footprint blobs)
-  for (let i = 0; i < 900; i++) {
-    const x = r() * W, y = r() * H;
-    const w = 3 + r() * 16, h = 4 + r() * 22;
-    const mud = 24 + r() * 22;
-    const gr = g.createRadialGradient(x, y, 0, x, y, Math.max(w, h));
-    gr.addColorStop(0, `rgba(${mud + 10},${mud + 6},${mud},0.7)`);
-    gr.addColorStop(0.55, `rgba(${mud + 8},${mud + 4},${mud},0.32)`);
-    gr.addColorStop(1, `rgba(${mud},${mud},${mud},0)`);
-    g.fillStyle = gr; g.fillRect(x - w * 2, y - h * 2, w * 4, h * 4);
-    const rr = rg.createRadialGradient(x, y, 0, x, y, Math.max(w, h));
-    rr.addColorStop(0, "rgba(8,8,8,0.92)");
-    rr.addColorStop(0.55, "rgba(35,35,35,0.4)");
-    rr.addColorStop(1, "rgba(40,40,40,0)");
-    rg.fillStyle = rr; rg.fillRect(x - w * 2, y - h * 2, w * 4, h * 4);
-  }
-  // small dry grit patches (keep micro variation, no giant ovals)
-  for (let i = 0; i < 220; i++) {
-    const x = r() * W, y = r() * H, w = 3 + r() * 12, h = 4 + r() * 16;
-    g.fillStyle = `rgba(70,65,58,${0.06 + r() * 0.1})`;
-    g.beginPath(); g.ellipse(x, y, w, h, r() * 3, 0, Math.PI * 2); g.fill();
-    rg.fillStyle = `rgba(200,200,200,${0.2 + r() * 0.3})`;
-    rg.beginPath(); rg.ellipse(x, y, w, h, 0, 0, Math.PI * 2); rg.fill();
-  }
-  // worn centre seam
-  g.fillStyle = "rgba(12,12,14,0.85)";
-  for (let y = 0; y < H; y += 2) {
-    g.fillRect(W * 0.5 + Math.sin(y * 0.012) * 2.5 + (r() - 0.5) * 2, y, 2.5, 2);
-  }
-  rg.fillStyle = "#181818"; rg.fillRect(W * 0.5 - 3, 0, 6, H);
 
-  // leaf litter — denser toward near end of texture (high v = near camera when mapped)
-  const leafCols = ["#9a4a18", "#b8701e", "#7a2a12", "#c48a2a", "#5a3a20", "#a85820", "#6b3010", "#d49830"];
-  for (let i = 0; i < 900; i++) {
-    // bias toward bottom half of texture (near road in view)
-    const yBias = Math.pow(r(), 0.55);
-    const y = H * (0.35 + 0.65 * yBias);
-    const x = r() * W;
-    g.save();
-    g.translate(x, y);
-    g.rotate(r() * 6.3);
-    const s = 1.4 + r() * 2.8;
-    g.scale(s, s * (1.6 + r()));
-    g.globalAlpha = 0.75 + r() * 0.25;
-    g.fillStyle = leafCols[Math.floor(r() * leafCols.length)];
-    leafPath(g, r() < 0.55);
-    g.restore();
-    // leaves add micro roughness
-    rg.fillStyle = "rgba(160,160,160,0.35)";
-    rg.fillRect(x - 2, y - 2, 4, 4);
+  // tiny wet flecks only
+  for (let i = 0; i < 120; i++) {
+    const x = r() * W, y = r() * H;
+    const rad = 1.0 + r() * 3.0;
+    g.fillStyle = `rgba(30,32,34,${0.2 + r() * 0.25})`;
+    g.beginPath(); g.ellipse(x, y, rad * (0.7 + r()), rad * (1 + r()), r() * 2, 0, Math.PI * 2); g.fill();
+    rg.fillStyle = "rgba(25,25,25,0.4)";
+    rg.beginPath(); rg.ellipse(x, y, rad, rad * 1.2, 0, 0, Math.PI * 2); rg.fill();
   }
-  // mud splatter / brown wash near edges
-  for (let i = 0; i < 35; i++) {
-    const side = r() < 0.5 ? r() * W * 0.2 : W * (0.8 + r() * 0.2);
-    const y = r() * H;
-    g.fillStyle = `rgba(55,42,28,${0.12 + r() * 0.2})`;
-    g.beginPath(); g.ellipse(side, y, 5 + r() * 14, 4 + r() * 12, 0, 0, Math.PI * 2); g.fill();
+
+  // centre seam
+  g.fillStyle = "rgba(18,18,20,0.85)";
+  for (let y = 0; y < H; y += 1) {
+    g.fillRect(W * 0.5 + Math.sin(y * 0.014) * 1.8 + (r() - 0.5), y, 1.4, 1);
+  }
+
+  // sparse tiny leaves
+  const leafCols = ["#9a4a18", "#b8701e", "#7a2a12", "#c48a2a", "#a85820"];
+  for (let i = 0; i < 420; i++) {
+    const y = H * (0.5 + 0.5 * Math.pow(r(), 0.75));
+    const x = r() * W;
+    g.save(); g.translate(x, y); g.rotate(r() * 6.3);
+    const s = 1.0 + r() * 2.0;
+    g.scale(s, s * (1.3 + r()));
+    g.globalAlpha = 0.65 + r() * 0.35;
+    g.fillStyle = leafCols[Math.floor(r() * leafCols.length)];
+    leafPath(g, r() < 0.5);
+    g.restore();
   }
 
   const map = new THREE.CanvasTexture(c), rough = new THREE.CanvasTexture(rc);
