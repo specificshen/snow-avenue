@@ -70,62 +70,47 @@ export function buildTree(spec: TreeSpec, seed: number): BuiltTree {
         }
       }
     }
-    const count = Math.round(b.r * b.r * 85 * params.density * (spec.leafiness ?? 1) / spec.leafSize);
+    const count = Math.round(b.r * b.r * 70 * params.density * (spec.leafiness ?? 1) / spec.leafSize);
     for (let i = 0; i < count; i++) {
       const d = new THREE.Vector3().randomDirection().multiplyScalar(Math.pow(rand(), 0.35));
       d.y *= 0.85;
       const pos = b.c.clone().addScaledVector(d, b.r);
       const col = new THREE.Color(spec.palette[Math.floor(rand() * spec.palette.length)]);
       const shade = 0.82 + 0.25 * (d.y * 0.5 + 0.5);
-      col.multiplyScalar(shade * 0.92);
+      col.multiplyScalar(shade);
       if (rand() < spec.snow * (d.y > 0 ? 1.3 : 0.4)) col.lerp(snowWhite, 0.55 + rand() * 0.3);
-      leaves.push({ pos, size: spec.leafSize * (0.7 + rand() * 0.55) * (1 + depth / 50), color: col, rot: rand() * 6.28 });
+      leaves.push({ pos, size: spec.leafSize * 0.75 * (0.75 + rand() * 0.5) * (1 + depth / 40), color: col, rot: rand() * 6.28 });
     }
   }
   return { wood, leaves };
 }
 
-/** Soft volumetric canopy shells: large soft puffs (no depth write) + denser mid shells. */
+/** Dense leaf-card clumps with soft alpha (54a4dd9 look, slightly softer edges). */
 export function leafMesh(all: BuiltTree["leaves"], seed: number) {
   const geo = new THREE.PlaneGeometry(1, 1);
-  const softMap = leafClump(seed, true);
-  const midMap = leafClump(seed + 3, false);
-  const softMat = new THREE.MeshBasicMaterial({
-    map: softMap, transparent: true, opacity: 0.92, depthWrite: false,
-    alphaTest: 0.02, side: THREE.DoubleSide, blending: THREE.NormalBlending,
-  });
-  const midMat = new THREE.MeshBasicMaterial({
-    map: midMap, transparent: true, depthWrite: true, alphaTest: 0.08, side: THREE.DoubleSide,
-  });
+  const mats = [true, false].map((maple, i) =>
+    new THREE.MeshBasicMaterial({
+      map: leafClump(seed + i, maple),
+      alphaTest: 0.18,
+      transparent: true,
+      depthWrite: true,
+      side: THREE.DoubleSide,
+    }));
   const group = new THREE.Group();
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3();
-  // Layer A: every leaf as soft large shell
-  {
-    const mesh = new THREE.InstancedMesh(geo, softMat, all.length);
-    mesh.renderOrder = 1;
-    all.forEach((l, i) => {
+  mats.forEach((mat, mi) => {
+    const mine = all.filter((_, i) => i % 2 === mi);
+    if (!mine.length) return;
+    const mesh = new THREE.InstancedMesh(geo, mat, mine.length);
+    mine.forEach((l, i) => {
       const toCam = Math.atan2(shot.eye.x - l.pos.x, shot.eye.z - l.pos.z);
-      e.set((l.rot - 3.14) * 0.12, toCam + (l.rot - 3.14) * 0.15, l.rot * 0.4);
-      m.compose(l.pos, q.setFromEuler(e), s.setScalar(l.size * 1.15));
+      e.set((l.rot - 3.14) * 0.25, toCam + (l.rot - 3.14) * 0.3, l.rot);
+      m.compose(l.pos, q.setFromEuler(e), s.setScalar(l.size));
       mesh.setMatrixAt(i, m);
       mesh.setColorAt(i, l.color);
     });
     group.add(mesh);
-  }
-  // Layer B: half as denser mid shells for volume
-  {
-    const mine = all.filter((_, i) => i % 2 === 0);
-    const mesh = new THREE.InstancedMesh(geo, midMat, mine.length);
-    mesh.renderOrder = 2;
-    mine.forEach((l, i) => {
-      const toCam = Math.atan2(shot.eye.x - l.pos.x, shot.eye.z - l.pos.z);
-      e.set((l.rot - 3.14) * 0.2, toCam + (l.rot - 3.14) * 0.2, l.rot);
-      m.compose(l.pos, q.setFromEuler(e), s.setScalar(l.size * 0.75));
-      mesh.setMatrixAt(i, m);
-      mesh.setColorAt(i, l.color.clone().multiplyScalar(0.92));
-    });
-    group.add(mesh);
-  }
+  });
   return group;
 }
 

@@ -22,7 +22,7 @@ export function wetRoadWithReflection(env: THREE.Texture | null, backend: "webgp
   const cx = (left + right) / 2, cz = 4 - FAR / 2;
 
   const useReflect = backend === "webgl" && !params.mask;
-  const rtSize = Math.min(1024, Math.floor(640 * params.pixelRatio));
+  const rtSize = Math.min(160, Math.floor(120 * params.pixelRatio)); // very low-res blur
   const rt = useReflect
     ? new THREE.WebGLRenderTarget(rtSize, Math.floor(rtSize * 2), {
         type: THREE.HalfFloatType,
@@ -37,19 +37,20 @@ export function wetRoadWithReflection(env: THREE.Texture | null, backend: "webgp
     map,
     roughnessMap: rough,
     envMap: env ?? undefined,
-    color: "#18191b",
-    roughness: 0.48,
-    metalness: 0.02,
-    clearcoat: 0.65,
-    clearcoatRoughness: 0.12,
-    envMapIntensity: useReflect ? 0.25 : 0.7,
+    color: "#3a3c40",
+    roughness: 0.68,
+    metalness: 0,
+    clearcoat: 0.22,
+    clearcoatRoughness: 0.45,
+    envMapIntensity: useReflect ? 0.35 : 0.55,
   });
 
   if (rt) {
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.tPlanarReflect = { value: rt.texture };
       shader.uniforms.uReflectMatrix = { value: reflectorMatrix };
-      shader.uniforms.uReflectMix = { value: 0.68 };
+      shader.uniforms.uReflectMix = { value: 0.14 };
+      shader.uniforms.uReflectBlur = { value: 1.0 / rtSize };
       shader.vertexShader = shader.vertexShader
         .replace(
           "#include <common>",
@@ -70,6 +71,7 @@ vPlanarWorldPos = (modelMatrix * vec4( transformed, 1.0 )).xyz;
 uniform sampler2D tPlanarReflect;
 uniform mat4 uReflectMatrix;
 uniform float uReflectMix;
+uniform float uReflectBlur;
 varying vec3 vPlanarWorldPos;
 `,
         )
@@ -79,18 +81,30 @@ varying vec3 vPlanarWorldPos;
 {
   vec4 rUv = uReflectMatrix * vec4( vPlanarWorldPos, 1.0 );
   vec2 rq = rUv.xy / max( rUv.w, 1e-4 );
-  float edge = smoothstep( 0.0, 0.08, rq.x ) * smoothstep( 1.0, 0.92, rq.x )
-             * smoothstep( 0.0, 0.06, rq.y ) * smoothstep( 1.0, 0.94, rq.y );
-  vec3 refl = texture2D( tPlanarReflect, clamp( rq, 0.0, 1.0 ) ).rgb;
-  float nearWet = smoothstep( -50.0, -1.5, vPlanarWorldPos.z );
-  float roughF = 1.0 - roughnessFactor;
-  float mixAmt = uReflectMix * roughF * edge * ( 0.4 + 0.6 * nearWet );
-  diffuseColor.rgb = mix( diffuseColor.rgb, refl, clamp( mixAmt, 0.0, 0.82 ) );
+  float edge = smoothstep( 0.0, 0.1, rq.x ) * smoothstep( 1.0, 0.9, rq.x )
+             * smoothstep( 0.0, 0.08, rq.y ) * smoothstep( 1.0, 0.92, rq.y );
+  // wide multi-tap blur: wet asphalt streak, not chrome
+  vec2 px = vec2( uReflectBlur * 5.0, uReflectBlur * 3.0 );
+  vec3 refl = vec3( 0.0 );
+  float wsum = 0.0;
+  for ( int iy = -2; iy <= 2; iy++ ) {
+    for ( int ix = -2; ix <= 2; ix++ ) {
+      float w = 1.0 / ( 1.0 + float( ix * ix + iy * iy ) );
+      refl += texture2D( tPlanarReflect, clamp( rq + px * vec2( float( ix ), float( iy ) ), 0.0, 1.0 ) ).rgb * w;
+      wsum += w;
+    }
+  }
+  refl /= wsum;
+  refl *= 0.58; // dull
+  float nearWet = smoothstep( -40.0, -2.0, vPlanarWorldPos.z );
+  float roughF = pow( 1.0 - roughnessFactor, 1.5 );
+  float mixAmt = uReflectMix * roughF * edge * ( 0.35 + 0.45 * nearWet );
+  diffuseColor.rgb = mix( diffuseColor.rgb, refl, clamp( mixAmt, 0.0, 0.18 ) );
 }
 `,
         );
     };
-    mat.customProgramCacheKey = () => "wet-planar-reflect-v2";
+    mat.customProgramCacheKey = () => "wet-planar-reflect-v7";
   }
 
   const mesh = new THREE.Mesh(geo, mat);
@@ -103,7 +117,7 @@ varying vec3 vPlanarWorldPos;
   // darker near band (photo: near asphalt is darker)
   const nearPad = new THREE.Mesh(
     new THREE.PlaneGeometry(w * 0.98, 16).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ color: "#0c0d0f", transparent: true, opacity: 0.28, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: "#0c0d0f", transparent: true, opacity: 0.06, depthWrite: false }),
   );
   nearPad.position.set(cx, 0.004, -1.5);
   nearPad.renderOrder = 2;

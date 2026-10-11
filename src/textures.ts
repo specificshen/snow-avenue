@@ -18,43 +18,30 @@ function leafPath(g: CanvasRenderingContext2D, maple: boolean) {
   g.fill();
 }
 
-/**
- * Soft volumetric canopy puff: overlapping soft discs + faint leaf grain.
- * No hard silhouette — alpha feathers to 0 at the rim.
- */
-export function leafClump(seed: number, _maple: boolean) {
+/** Soft-edged leaf clump — leaf-shaped cards with feathered alpha (54a4dd9 look). */
+export function leafClump(seed: number, maple: boolean) {
   const S = 256, [c, g] = canvas(S, S), r = rng(seed);
   g.clearRect(0, 0, S, S);
-  // large soft body
-  for (let i = 0; i < 18; i++) {
-    const cx = S * (0.35 + r() * 0.3), cy = S * (0.35 + r() * 0.3);
-    const rad = S * (0.22 + r() * 0.22);
-    const gr = g.createRadialGradient(cx, cy, 0, cx, cy, rad);
-    const a0 = 0.35 + r() * 0.35;
-    gr.addColorStop(0, `rgba(255,255,255,${a0})`);
-    gr.addColorStop(0.45, `rgba(255,255,255,${a0 * 0.55})`);
-    gr.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = gr;
-    g.beginPath(); g.arc(cx, cy, rad, 0, Math.PI * 2); g.fill();
+  for (let i = 0; i < 120; i++) {
+    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * S * 0.4;
+    g.save();
+    g.translate(S / 2 + Math.cos(a) * d, S / 2 + Math.sin(a) * d);
+    g.rotate(r() * Math.PI * 2);
+    const s = S * (0.035 + r() * 0.035);
+    g.scale(s, s);
+    const v = 200 + r() * 55;
+    g.globalAlpha = 0.55 + r() * 0.4;
+    g.fillStyle = `rgb(${v},${v * (0.92 + r() * 0.08)},${v * (0.85 + r() * 0.1)})`;
+    leafPath(g, maple);
+    g.restore();
   }
-  // finer soft speckles for leaf grain (still soft)
-  for (let i = 0; i < 80; i++) {
-    const cx = S * (0.2 + r() * 0.6), cy = S * (0.2 + r() * 0.6);
-    const rad = S * (0.03 + r() * 0.07);
-    const gr = g.createRadialGradient(cx, cy, 0, cx, cy, rad);
-    const a0 = 0.15 + r() * 0.25;
-    gr.addColorStop(0, `rgba(255,255,255,${a0})`);
-    gr.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = gr;
-    g.beginPath(); g.arc(cx, cy, rad, 0, Math.PI * 2); g.fill();
-  }
-  // global radial mask so the card edge is invisible
+  // feather outer alpha so card edges don't read as paper cutouts
   const img = g.getImageData(0, 0, S, S), d = img.data, cx = S / 2, cy = S / 2, maxR = S * 0.48;
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
     const i = (y * S + x) * 4;
+    if (d[i + 3] === 0) continue;
     const rr = Math.hypot(x - cx, y - cy) / maxR;
-    const fall = rr >= 1 ? 0 : rr > 0.55 ? 1 - (rr - 0.55) / 0.45 : 1;
-    d[i + 3] = Math.round(d[i + 3] * fall * fall);
+    if (rr > 0.65) d[i + 3] = Math.round(d[i + 3] * Math.max(0, 1 - (rr - 0.65) / 0.35));
   }
   g.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
