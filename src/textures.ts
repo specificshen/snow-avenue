@@ -17,40 +17,51 @@ function leafPath(g: CanvasRenderingContext2D, maple: boolean) {
   } else g.ellipse(0, 0, 0.55, 1, 0, 0, Math.PI * 2);
   g.fill();
 }
-/** Soft-edged leaf clump — feathered alpha reduces paper-cutout silhouettes. */
-export function leafClump(seed: number, maple: boolean) {
+
+/**
+ * Soft volumetric canopy puff: overlapping soft discs + faint leaf grain.
+ * No hard silhouette — alpha feathers to 0 at the rim.
+ */
+export function leafClump(seed: number, _maple: boolean) {
   const S = 256, [c, g] = canvas(S, S), r = rng(seed);
-  // soft radial falloff under the leaves
-  const soft = g.createRadialGradient(S / 2, S / 2, S * 0.05, S / 2, S / 2, S * 0.48);
-  soft.addColorStop(0, "rgba(255,255,255,0.0)");
-  soft.addColorStop(1, "rgba(255,255,255,0.0)");
-  g.fillStyle = soft; g.fillRect(0, 0, S, S);
-  for (let i = 0; i < 120; i++) {
-    const a = r() * Math.PI * 2, d = Math.sqrt(r()) * S * 0.4;
-    g.save();
-    g.translate(S / 2 + Math.cos(a) * d, S / 2 + Math.sin(a) * d);
-    g.rotate(r() * Math.PI * 2);
-    const s = S * (0.035 + r() * 0.035);
-    g.scale(s, s);
-    const v = 200 + r() * 55;
-    g.globalAlpha = 0.55 + r() * 0.4;
-    g.fillStyle = `rgb(${v},${v * (0.92 + r() * 0.08)},${v * (0.85 + r() * 0.1)})`;
-    leafPath(g, maple);
-    g.restore();
+  g.clearRect(0, 0, S, S);
+  // large soft body
+  for (let i = 0; i < 18; i++) {
+    const cx = S * (0.35 + r() * 0.3), cy = S * (0.35 + r() * 0.3);
+    const rad = S * (0.22 + r() * 0.22);
+    const gr = g.createRadialGradient(cx, cy, 0, cx, cy, rad);
+    const a0 = 0.35 + r() * 0.35;
+    gr.addColorStop(0, `rgba(255,255,255,${a0})`);
+    gr.addColorStop(0.45, `rgba(255,255,255,${a0 * 0.55})`);
+    gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gr;
+    g.beginPath(); g.arc(cx, cy, rad, 0, Math.PI * 2); g.fill();
   }
-  // feather outer alpha
+  // finer soft speckles for leaf grain (still soft)
+  for (let i = 0; i < 80; i++) {
+    const cx = S * (0.2 + r() * 0.6), cy = S * (0.2 + r() * 0.6);
+    const rad = S * (0.03 + r() * 0.07);
+    const gr = g.createRadialGradient(cx, cy, 0, cx, cy, rad);
+    const a0 = 0.15 + r() * 0.25;
+    gr.addColorStop(0, `rgba(255,255,255,${a0})`);
+    gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gr;
+    g.beginPath(); g.arc(cx, cy, rad, 0, Math.PI * 2); g.fill();
+  }
+  // global radial mask so the card edge is invisible
   const img = g.getImageData(0, 0, S, S), d = img.data, cx = S / 2, cy = S / 2, maxR = S * 0.48;
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
     const i = (y * S + x) * 4;
-    if (d[i + 3] === 0) continue;
     const rr = Math.hypot(x - cx, y - cy) / maxR;
-    if (rr > 0.7) d[i + 3] = Math.round(d[i + 3] * Math.max(0, 1 - (rr - 0.7) / 0.3));
+    const fall = rr >= 1 ? 0 : rr > 0.55 ? 1 - (rr - 0.55) / 0.45 : 1;
+    d[i + 3] = Math.round(d[i + 3] * fall * fall);
   }
   g.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
+
 export function snowTexture(seed: number, leaves: string[], leafAmount: number) {
   const S = 512, [c, g] = canvas(S, S), r = rng(seed);
   g.fillStyle = "#d6d7db"; g.fillRect(0, 0, S, S);
@@ -71,6 +82,7 @@ export function snowTexture(seed: number, leaves: string[], leafAmount: number) 
   t.anisotropy = 4;
   return t;
 }
+
 export function roadTextures(seed: number) {
   const W = 256, H = 2048, r = rng(seed);
   const [c, g] = canvas(W, H), [rc, rg] = canvas(W, H);
@@ -86,6 +98,12 @@ export function roadTextures(seed: number) {
     const gr = rg.createRadialGradient(x, y, 0, x, y, Math.max(w, h));
     gr.addColorStop(0, "rgba(20,20,20,0.6)"); gr.addColorStop(1, "rgba(20,20,20,0)");
     rg.fillStyle = gr; rg.fillRect(x - w * 2, y - h * 2, w * 4, h * 4);
+  }
+  // nearer road (texture v near 1 / bottom of view when mapped) slightly smoother = wetter
+  for (let y = 0; y < H * 0.25; y++) {
+    const t = 1 - y / (H * 0.25);
+    rg.fillStyle = `rgba(30,30,30,${0.25 * t})`;
+    rg.fillRect(0, H - 1 - y, W, 1);
   }
   g.fillStyle = "rgba(15,16,18,0.9)";
   for (let y = 0; y < H; y += 2) g.fillRect(W * 0.5 + Math.sin(y * 0.01) * 2 + (r() - 0.5) * 1.5, y, 2.2, 2);

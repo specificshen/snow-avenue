@@ -3,8 +3,8 @@ import { atDepth, ground, shot } from "./camera";
 import { farRows, fence, lamps, palettes, sky, trees } from "./layout";
 import { params, rng } from "./params";
 import { snowTexture } from "./textures";
-import { buildFarTree, buildTree, fogBranchFill, leafMesh, rightTwigWeb, woodMesh, type BuiltTree } from "./tree";
-import { roadMaskMesh, wetRoad } from "./road";
+import { buildFarTree, buildTree, fogBranchFill, leafMesh, midFogWeb, rightTwigWeb, woodMesh, type BuiltTree } from "./tree";
+import { roadMaskMesh, wetRoadWithReflection, type PlanarReflection } from "./road";
 import { FAR, roadEdges } from "./world-shared";
 export { roadEdges };
 
@@ -25,6 +25,7 @@ function verge(side: -1 | 1) {
   const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map, color: side < 0 ? "#c4c4c8" : "#b4aeaa", roughness: 0.85 }));
   mesh.scale.x = side;
   mesh.position.set(edge + (side * w) / 2, 0, 4 - FAR / 2);
+  mesh.name = "verge";
   return mesh;
 }
 
@@ -41,6 +42,7 @@ function fallenLeaves() {
     new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }),
     all.length,
   );
+  mesh.name = "fallenLeaves";
   const c = new THREE.Color();
   all.forEach((d, i) => {
     const t = Math.pow(r(), 0.6), x = d.x[1] + (d.x[0] - d.x[1]) * t * (0.4 + 0.6 * r());
@@ -104,6 +106,7 @@ function fallingSnow() {
   for (let i = 0; i < n; i++) pos.set([(r() - 0.5) * 30, r() * 14, -3 - r() * 50], i * 3);
   const geo = new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(pos, 3));
   const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: "#ffffff", size: 0.025, transparent: true, opacity: 0.7, depthWrite: false }));
+  pts.name = "fallingSnow";
   pts.userData.tick = (dt: number) => {
     for (let i = 0; i < n; i++) {
       let y = pos[i * 3 + 1] - dt * 0.8;
@@ -130,23 +133,29 @@ function skyGradient() {
 export function buildWorld(scene: THREE.Scene, backend: Backend) {
   if (params.mask) {
     scene.add(roadMaskMesh());
-    return { tick: (_: number) => {}, stats: { leaves: 0 } };
+    return { tick: (_: number) => {}, reflect: null as PlanarReflection | null, stats: { leaves: 0 } };
   }
-  scene.add(wetRoad(scene.environment, backend));
+  const reflect = wetRoadWithReflection(scene.environment, backend);
+  scene.add(reflect.group);
   scene.add(verge(-1), verge(1), fallenLeaves(), lampPosts(), railing());
   const built = [...trees.map((t, i) => buildTree(t, params.seed * 100 + i)), ...farAvenue()];
   const allWood = [
     ...built.flatMap((b) => b.wood),
     ...fogBranchFill(params.seed + 99),
     ...rightTwigWeb(params.seed + 123),
+    ...midFogWeb(params.seed + 77),
   ];
   scene.add(woodMesh(allWood));
   const leaves = built.flatMap((b) => b.leaves);
   scene.add(leafMesh(leaves, params.seed));
   const snow = params.snow ? fallingSnow() : null;
   if (snow) scene.add(snow);
-  scene.fog = new THREE.FogExp2(sky.fog, sky.fogDensity);
+  scene.fog = new THREE.FogExp2(sky.fog, sky.fogDensity * 1.08);
   scene.background = skyGradient();
   void shot;
-  return { tick: (dt: number) => snow?.userData.tick(dt), stats: { leaves: leaves.length } };
+  return {
+    tick: (dt: number) => snow?.userData.tick(dt),
+    reflect,
+    stats: { leaves: leaves.length },
+  };
 }

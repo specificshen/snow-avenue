@@ -30,8 +30,7 @@ async function boot() {
   const scene = new THREE.Scene();
   const camera = new ShotCamera();
   if (!params.mask) {
-    // PMREM works on WebGL; WebGPU path uses hemisphere/dir lights only if PMREM fails
-    try { scene.environment = envMap(renderer); } catch { /* webgpu may lack PMREM from WebGL path */ }
+    try { scene.environment = envMap(renderer); } catch { /* ignore */ }
     scene.add(new THREE.HemisphereLight("#dfe3ea", "#8a8580", 2.0));
     const key = new THREE.DirectionalLight("#f2efe9", 1.05);
     key.position.set(-6, 20, 4);
@@ -57,6 +56,9 @@ async function boot() {
     if (!params.fixed) {
       world.tick(dt);
       camera.rotation.y = yaw0 - dragX + Math.sin(now * 0.0002) * 0.004;
+    }
+    if (world.reflect && renderer.backend === "webgl") {
+      world.reflect.render(renderer, scene, camera);
     }
     renderer.render(scene, camera);
     window.__demo.frames++;

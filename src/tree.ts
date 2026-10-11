@@ -70,40 +70,62 @@ export function buildTree(spec: TreeSpec, seed: number): BuiltTree {
         }
       }
     }
-    const count = Math.round(b.r * b.r * 52 * params.density * (spec.leafiness ?? 1) / spec.leafSize);
+    const count = Math.round(b.r * b.r * 85 * params.density * (spec.leafiness ?? 1) / spec.leafSize);
     for (let i = 0; i < count; i++) {
       const d = new THREE.Vector3().randomDirection().multiplyScalar(Math.pow(rand(), 0.35));
       d.y *= 0.85;
       const pos = b.c.clone().addScaledVector(d, b.r);
       const col = new THREE.Color(spec.palette[Math.floor(rand() * spec.palette.length)]);
       const shade = 0.82 + 0.25 * (d.y * 0.5 + 0.5);
-      col.multiplyScalar(shade);
+      col.multiplyScalar(shade * 0.92);
       if (rand() < spec.snow * (d.y > 0 ? 1.3 : 0.4)) col.lerp(snowWhite, 0.55 + rand() * 0.3);
-      leaves.push({ pos, size: spec.leafSize * 0.7 * (0.75 + rand() * 0.5) * (1 + depth / 40), color: col, rot: rand() * 6.28 });
+      leaves.push({ pos, size: spec.leafSize * (0.7 + rand() * 0.55) * (1 + depth / 50), color: col, rot: rand() * 6.28 });
     }
   }
   return { wood, leaves };
 }
 
-/** One draw for every leaf card in the scene, cards face the camera with jitter. */
+/** Soft volumetric canopy shells: large soft puffs (no depth write) + denser mid shells. */
 export function leafMesh(all: BuiltTree["leaves"], seed: number) {
   const geo = new THREE.PlaneGeometry(1, 1);
-  const mats = [true, false].map((maple, i) =>
-    new THREE.MeshBasicMaterial({ map: leafClump(seed + i, maple), alphaTest: 0.2, transparent: true, depthWrite: true, side: THREE.DoubleSide }));
+  const softMap = leafClump(seed, true);
+  const midMap = leafClump(seed + 3, false);
+  const softMat = new THREE.MeshBasicMaterial({
+    map: softMap, transparent: true, opacity: 0.92, depthWrite: false,
+    alphaTest: 0.02, side: THREE.DoubleSide, blending: THREE.NormalBlending,
+  });
+  const midMat = new THREE.MeshBasicMaterial({
+    map: midMap, transparent: true, depthWrite: true, alphaTest: 0.08, side: THREE.DoubleSide,
+  });
   const group = new THREE.Group();
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3();
-  mats.forEach((mat, mi) => {
-    const mine = all.filter((_, i) => i % 2 === mi);
-    const mesh = new THREE.InstancedMesh(geo, mat, mine.length);
-    mine.forEach((l, i) => {
+  // Layer A: every leaf as soft large shell
+  {
+    const mesh = new THREE.InstancedMesh(geo, softMat, all.length);
+    mesh.renderOrder = 1;
+    all.forEach((l, i) => {
       const toCam = Math.atan2(shot.eye.x - l.pos.x, shot.eye.z - l.pos.z);
-      e.set((l.rot - 3.14) * 0.25, toCam + (l.rot - 3.14) * 0.3, l.rot);
-      m.compose(l.pos, q.setFromEuler(e), s.setScalar(l.size));
+      e.set((l.rot - 3.14) * 0.12, toCam + (l.rot - 3.14) * 0.15, l.rot * 0.4);
+      m.compose(l.pos, q.setFromEuler(e), s.setScalar(l.size * 1.15));
       mesh.setMatrixAt(i, m);
       mesh.setColorAt(i, l.color);
     });
     group.add(mesh);
-  });
+  }
+  // Layer B: half as denser mid shells for volume
+  {
+    const mine = all.filter((_, i) => i % 2 === 0);
+    const mesh = new THREE.InstancedMesh(geo, midMat, mine.length);
+    mesh.renderOrder = 2;
+    mine.forEach((l, i) => {
+      const toCam = Math.atan2(shot.eye.x - l.pos.x, shot.eye.z - l.pos.z);
+      e.set((l.rot - 3.14) * 0.2, toCam + (l.rot - 3.14) * 0.2, l.rot);
+      m.compose(l.pos, q.setFromEuler(e), s.setScalar(l.size * 0.75));
+      mesh.setMatrixAt(i, m);
+      mesh.setColorAt(i, l.color.clone().multiplyScalar(0.92));
+    });
+    group.add(mesh);
+  }
   return group;
 }
 
@@ -137,7 +159,7 @@ export function buildFarTree(base: THREE.Vector3, seed: number, side: number): B
 /** Mid-fog silhouette fill: sparse snowy twigs so the bright fog band is not empty. */
 export function fogBranchFill(seed: number): THREE.BufferGeometry[] {
   const rand = rng(seed), wood: THREE.BufferGeometry[] = [];
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 70; i++) {
     const side = i % 2 === 0 ? -1 : 1;
     const z = -30 - rand() * 85;
     const x = side * (4 + rand() * 9);
@@ -145,10 +167,14 @@ export function fogBranchFill(seed: number): THREE.BufferGeometry[] {
     const h = 7 + rand() * 9;
     const top = base.clone().add(new THREE.Vector3(side * rand(), h, (rand() - 0.5) * 3));
     wood.push(limb(base, top, 0.05, 0.018, 1.8, rand));
-    for (let k = 0; k < 6; k++) {
-      const from = base.clone().lerp(top, 0.3 + rand() * 0.6);
-      const tip = from.clone().add(new THREE.Vector3((rand() - 0.5) * 5, (rand() - 0.2) * 3.5, (rand() - 0.5) * 4));
-      wood.push(limb(from, tip, 0.016, 0.005, 2.2, rand));
+    for (let k = 0; k < 9; k++) {
+      const from = base.clone().lerp(top, 0.25 + rand() * 0.7);
+      const tip = from.clone().add(new THREE.Vector3((rand() - 0.5) * 5.5, (rand() - 0.2) * 4, (rand() - 0.5) * 4.5));
+      wood.push(limb(from, tip, 0.014, 0.004, 2.4, rand));
+      if (rand() < 0.5) {
+        const tip2 = tip.clone().add(new THREE.Vector3((rand()-0.5)*2, rand()*1.5, (rand()-0.5)*2));
+        wood.push(limb(tip, tip2, 0.006, 0.003, 2.6, rand));
+      }
     }
   }
   return wood;
@@ -157,17 +183,44 @@ export function fogBranchFill(seed: number): THREE.BufferGeometry[] {
 /** Right-side snowy twig accents (photo: fine frosted branch web). */
 export function rightTwigWeb(seed: number): THREE.BufferGeometry[] {
   const rand = rng(seed), wood: THREE.BufferGeometry[] = [];
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 22; i++) {
     const u = 0.62 + rand() * 0.35;
     const depth = 14 + rand() * 40;
     const base = new THREE.Vector3(atDepth(u, 0.5, depth).x, -0.05, -depth);
     const h = 6 + rand() * 10;
     const top = base.clone().add(new THREE.Vector3(-0.5 - rand(), h, (rand() - 0.5) * 2));
     wood.push(limb(base, top, 0.035, 0.01, 2.5, rand));
-    for (let k = 0; k < 9; k++) {
-      const from = base.clone().lerp(top, 0.25 + rand() * 0.7);
-      const tip = from.clone().add(new THREE.Vector3(-0.8 - rand() * 3.5, (rand() - 0.15) * 2.8, (rand() - 0.5) * 2.5));
-      wood.push(limb(from, tip, 0.012, 0.004, 2.8, rand));
+    for (let k = 0; k < 12; k++) {
+      const from = base.clone().lerp(top, 0.2 + rand() * 0.75);
+      const tip = from.clone().add(new THREE.Vector3(-0.8 - rand() * 3.8, (rand() - 0.15) * 3, (rand() - 0.5) * 2.8));
+      wood.push(limb(from, tip, 0.011, 0.004, 2.9, rand));
+      if (rand() < 0.6) {
+        wood.push(limb(tip, tip.clone().add(new THREE.Vector3(-rand()*1.5, rand()*1.2, (rand()-0.5)*1.2)), 0.005, 0.002, 3.0, rand));
+      }
+    }
+  }
+  return wood;
+}
+
+
+/** Grey branch lattice aimed at the bright mid-fog photo band. */
+export function midFogWeb(seed: number): THREE.BufferGeometry[] {
+  const rand = rng(seed), wood: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 55; i++) {
+    const side = rand() < 0.5 ? -1 : 1;
+    const z = -32 - rand() * 70;
+    const x = side * (2.2 + rand() * 7);
+    const base = new THREE.Vector3(x, -0.05, z);
+    const h = 8 + rand() * 12;
+    const top = base.clone().add(new THREE.Vector3(side * (rand() - 0.2), h, (rand() - 0.5) * 4));
+    // lower snow so they read as grey silhouette in fog
+    wood.push(limb(base, top, 0.04, 0.014, 0.55, rand));
+    for (let k = 0; k < 8; k++) {
+      const from = base.clone().lerp(top, 0.2 + rand() * 0.75);
+      const tip = from.clone().add(new THREE.Vector3(
+        (rand() - 0.5) * 6, (rand() - 0.25) * 4, (rand() - 0.5) * 5,
+      ));
+      wood.push(limb(from, tip, 0.012, 0.004, 0.7, rand));
     }
   }
   return wood;

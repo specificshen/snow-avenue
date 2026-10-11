@@ -9,7 +9,7 @@ export type TreeSpec = {
 export const palettes = {
   red: ["#a03a1c", "#842a10", "#b04420", "#70200a", "#b84e26", "#943418"],
   green: ["#6f6a1a", "#58702a", "#868524", "#4a5a22", "#7a7a30"],
-  gold: ["#c47c0a", "#d8920e", "#ac6008", "#bc700a", "#e0a01a", "#9c5608"],
+  gold: ["#b8700a", "#c88812", "#a05808", "#b0680a", "#d09018", "#945008"],
   ochre: ["#a87850", "#b8885a", "#946a44", "#c09870", "#8a6040", "#c8a888"],
   amber: ["#b8701e", "#cc8a34", "#a85e18", "#d49a48"],
 };
@@ -35,4 +35,4 @@ export const farRows = [{ side: -1, offset: 2, from: 34, to: 170, step: 7 }, { s
 export const lamps: [number, number, number][] = [[0.27, 0.785, 0.63], [0.3, 0.775, 0.65]];
 /** Railing starts under photo pixel (u, vBase), runs parallel to the road; height solved from vTop. */
 export const fence = { u: 1.0, vBase: 0.785, vTop: 0.74 } as const;
-export const sky = { top: "#d4d8e2", horizon: "#a6a8ae", fog: "#98999d", fogDensity: 0.0185 };
+export const sky = { top: "#d4d8e2", horizon: "#a6a8ae", fog: "#96979b", fogDensity: 0.018 };
